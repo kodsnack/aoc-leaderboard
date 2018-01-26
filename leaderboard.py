@@ -10,6 +10,7 @@ Original here: https://github.com/tomswartz07/AdventOfCodeLeaderboard
 '''
 
 import json, requests
+from datetime import datetime
 
 # see README for directions on how to fill these variables
 # HARDCODED TO KODSNACK BOARD FOR NOW!
@@ -24,8 +25,8 @@ def formatLeaderMessage(members):
     message = "Dagens topplista:"
 
     # add each member to message
-    for username, score, stars in members[0:15]:
-        message += "\n*{}* {} Poäng, {} :star:".format(username, score, stars)
+    for username, score, stars, id, lastStarDate, diffSignal in members[0:15]:
+        message += "\n*{}* {} Poäng, {} :star:{}".format(username, score, stars, diffSignal)
 
     message += "\n\n<{}{}|Se topplistan online>".format(PRIVATE_LEADERBOARD_URL, LEADERBOARD_ID)
 
@@ -33,12 +34,26 @@ def formatLeaderMessage(members):
 
 def parseMembers(members_json):
     # get member name, score and stars
-    members = [(m["name"], m["local_score"], m["stars"]) for m in members_json.values()]
-
-    # sort members by score, decending
-    members.sort(key=lambda s: -s[1])
-
-    return members
+    dateFormat = "%Y-%m-%dT%H:%M:%S-0500"
+    members = [[m["name"], m["local_score"], m["stars"], m["id"], datetime.strptime(m["last_star_ts"], dateFormat)] for m in members_json.values()]
+    
+    # Maintain two orderings, so that we can highlight when our ranking differs from that of the site
+    aocOrdering = lambda member: (-member[1], int(member[3]))
+    kodsnackOrdering = lambda member: (-member[1], -member[2], member[4])    
+    aocMembers = sorted(members, key = aocOrdering)
+    kodsnackMembers = sorted(members, key = kodsnackOrdering)
+    
+    # Get difference between the two lists, and signal it somehow
+    for i, m in enumerate(kodsnackMembers):
+        id = m[3]
+        for j, n in enumerate(aocMembers):
+            jd = n[3]
+            if id == jd:
+                diff = i - j
+                diffSignal = '' if diff == 0 else ' :arrow_double_down:' if diff < - 1 else ' :arrow_down:' if diff == -1 else ' :arrow_up:' if diff == 1 else ' :arrow_double_up:'
+                kodsnackMembers[i].append(diffSignal)        
+                
+    return kodsnackMembers
 
 def postMessage(message):
     payload = json.dumps({
